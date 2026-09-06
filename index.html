@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OMR Scanner Pro - Rúbricas por Índice</title>
+  <title>OMR Scanner Pro - Diagnóstico</title>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>
   <style>
     :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --primary: #3b82f6; --success: #10b981; --danger: #ef4444; }
@@ -42,11 +42,11 @@
     .preview-bw { width: 33%; height: auto; background: #000; border: 1px solid #334155; border-radius: 6px; display: inline-block; margin: 8px auto 0 auto; cursor: pointer; transition: 0.3s ease; }
     .preview-bw.expanded { width: 100%; }
 
-    /* FOTO FINAL COMPACTA */
-    .mini-canvas-container { position: relative; width: 100%; height: 140px; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; cursor: pointer; transition: 0.3s ease;}
-    .mini-canvas-container.expanded { height: 60vh; max-height: 500px; }
-    #canvasFinal { width: 100%; height: 100%; object-fit: contain; background: #000; }
-    .expand-hint { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; font-weight: bold; pointer-events: none;}
+    /* FOTO FINAL VISIBLE PARA DESCARGA MANUAL */
+    .mini-canvas-container { position: relative; width: 100%; height: auto; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; text-align: center;}
+    #canvasFinal { width: 100%; height: auto; object-fit: contain; background: #000; display: none; }
+    #imgFinalDescarga { width: 100%; height: auto; object-fit: contain; display: block; }
+    .instruccion-descarga { background: #ea580c; color: white; padding: 6px; font-size: 0.8rem; font-weight: bold; text-align: center; }
 
     /* EDITOR MANUAL EN 2 COLUMNAS */
     #manualEditor { background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #10b981; }
@@ -134,10 +134,11 @@
       <div style="font-size:0.75rem; color:#94a3b8; text-align:center; margin-top:4px;">(Toque la imagen B/N para ampliarla)</div>
     </div>
 
-    <!-- Fotografía Final Compacta -->
-    <div class="mini-canvas-container" id="miniCanvasBox" onclick="toggleExpandCanvas()">
+    <!-- Fotografía Final Compacta Convertida a <img> para facilitar descarga táctil -->
+    <div class="mini-canvas-container">
+      <div class="instruccion-descarga">👇 Mantenga presionada la foto para Guardarla en su galería 👇</div>
       <canvas id="canvasFinal"></canvas>
-      <div class="expand-hint" id="expandHint">🔍 Toca para ampliar</div>
+      <img id="imgFinalDescarga" src="" alt="Examen Evaluado">
     </div>
     
     <div id="manualEditor">
@@ -145,17 +146,17 @@
       <div id="editorFilas"></div>
     </div>
 
-    <div class="loader" id="loaderUpload">⏳ Guardando...</div>
+    <div class="loader" id="loaderUpload">⏳ Conectando con Google Sheets...</div>
     
     <div id="reviewButtons">
-      <button class="btn btn-success" onclick="enviarCalificacion()">📥 CONFIRMAR Y SUBIR NOTA</button>
+      <button class="btn btn-success" onclick="enviarCalificacion()">📥 SOLO ENVIAR DATOS A SHEETS</button>
       <button class="btn btn-danger" onclick="volverAConfig()">❌ Descartar</button>
     </div>
   </div>
 
   <script>
     // =========================================================================
-    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT
+    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT (Asegúrese de las comillas)
     // =========================================================================
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbdnobu9aBFhXkZEfY8g2TeCiK4HEvjB6Rujp5h3O-PuJsd9j7xIj1JikgHlICXfgAAw/exec";
 
@@ -178,10 +179,9 @@
     let modoPantalla = false;
 
     function onOpenCvReady() { opencvReady = true; }
-    function showNotif(msg, bg="var(--success)") { let n = document.getElementById('notif'); n.innerText=msg; n.style.background=bg; n.style.display='block'; setTimeout(()=>n.style.display='none',3000); }
+    function showNotif(msg, bg="var(--success)") { let n = document.getElementById('notif'); n.innerText=msg; n.style.background=bg; n.style.display='block'; setTimeout(()=>n.style.display='none',3500); }
     function switchPanel(pid) { document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.getElementById(pid).classList.add('active'); window.scrollTo(0,0); }
 
-    function toggleExpandCanvas() { let box = document.getElementById('miniCanvasBox'); let hint = document.getElementById('expandHint'); box.classList.toggle('expanded'); hint.innerText = box.classList.contains('expanded') ? "Toca para reducir" : "🔍 Toca para ampliar"; }
     function toggleExpandBW(el) { el.classList.toggle('expanded'); }
     function toggleModo() { modoPantalla = !modoPantalla; let btn = document.getElementById('btnModo'); if (modoPantalla) { btn.innerText = "Modo Lectura: 💻 PANTALLA LED"; btn.style.background = "#ea580c"; btn.style.borderColor = "#c2410c"; showNotif("Filtro Pantalla Activado", "#ea580c"); } else { btn.innerText = "Modo Lectura: 📄 PAPEL"; btn.style.background = "#0284c7"; btn.style.borderColor = "#0369a1"; showNotif("Filtro Normal Activado"); } }
 
@@ -199,7 +199,7 @@
         let selEx = document.getElementById('selExamen'); selEx.innerHTML = '<option value="">-- Elija un examen --</option>';
         dbExamenes.forEach(ex => { let opt = document.createElement('option'); opt.value = ex.id; opt.innerText = `[${ex.id}] ${ex.tema}`; selEx.appendChild(opt); });
         document.getElementById('selectionCard').style.display = 'block'; switchPanel('panel-config'); showNotif("✅ Acceso Concedido");
-      } catch (err) { alert("Error de conexión. Asegúrese que el App Script esté para 'Cualquier Persona'"); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
+      } catch (err) { alert("Error de conexión. Verifique su URL de SCRIPT_URL o su internet."); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
     }
 
     function cerrarSesion() { userPin = ""; localStorage.removeItem("omr_pin"); document.getElementById("inputPin").value = ""; document.getElementById("selectionCard").style.display = "none"; switchPanel("panel-login"); }
@@ -391,7 +391,6 @@
       renderizarResultadosYEditor();
     }
 
-    // WrapText para que la rúbrica encaje en el cuadrito sin desbordarse
     function wrapText(context, text, x, y, maxWidth, lineHeight) {
         var words = text.split(' '); var line = '';
         for(var n = 0; n < words.length; n++) {
@@ -406,27 +405,17 @@
       let cantP = examenActual.cant_preguntas; let clave = examenActual.clave; let opc = examenActual.opciones;
       let aciertos = 0; let detalleArray = []; let incorrectasArray = []; let html = "";
       
-      // EL MAPEO MAESTRO DE RÚBRICAS POR ÍNDICE (Separador |)
-      // Si el excel venía vacío, creamos arrays seguros
-      let arrRubA = examenActual.rubA || [];
-      let arrRubF = examenActual.rubF || [];
-
+      let arrRubA = examenActual.rubA || []; let arrRubF = examenActual.rubF || [];
       let listRubricasParaSello = []; 
 
       for (let i = 0; i < cantP; i++) {
         let lC = clave[i]; let lM = arregloRespuestasManuales[i]; let esCorrecta = (lM === lC);
         
-        // Obtener el texto específico de ese índice (o un texto por defecto)
         let fA = (arrRubA[i] && arrRubA[i].trim() !== "") ? arrRubA[i].trim() : "¡Bien hecho!";
         let fF = (arrRubF[i] && arrRubF[i].trim() !== "") ? arrRubF[i].trim() : "Revisar procedimiento.";
 
-        if (esCorrecta) {
-            aciertos++; 
-            listRubricasParaSello.push(`✅ P${i+1}: ${fA}`);
-        } else {
-            incorrectasArray.push(i+1);
-            listRubricasParaSello.push(`❌ P${i+1}: ${fF}`);
-        }
+        if (esCorrecta) { aciertos++; listRubricasParaSello.push(`✅ P${i+1}: ${fA}`); } 
+        else { incorrectasArray.push(i+1); listRubricasParaSello.push(`❌ P${i+1}: ${fF}`); }
         
         detalleArray.push(`${i+1}:${lM}(${esCorrecta?'OK':'❌'+lC})`);
 
@@ -442,14 +431,12 @@
       let notaSobre100 = Math.round((aciertos / cantP) * 100);
       dataEvaluacion = { aciertos: aciertos, fallos: cantP - aciertos, totalPreguntas: cantP, nota100: notaSobre100, detalleRespuestas: detalleArray.join(", "), preguntasIncorrectas: incorrectasArray.length > 0 ? incorrectasArray.join(", ") : "Ninguna" };
 
-      // DIBUJAR LA FOTO ORIGINAL RECORTADA
-      canvasFinal.width = capturedImage.width; 
-      canvasFinal.height = capturedImage.height;
+      // DIBUJAR FOTO COMPLETA
+      canvasFinal.width = capturedImage.width; canvasFinal.height = capturedImage.height;
       ctxFinal.drawImage(capturedImage, 0, 0);
 
-      // --- 1. Sello Superior (Nombre y Curso) ---
-      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctxFinal.fillRect(20, 20, 750, 110);
+      // --- 1. Sello Superior ---
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)"; ctxFinal.fillRect(20, 20, 750, 110);
       ctxFinal.lineWidth = 3; ctxFinal.strokeStyle = "black"; ctxFinal.strokeRect(20, 20, 750, 110);
       
       ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 35px Arial";
@@ -457,7 +444,7 @@
       ctxFinal.font = "28px Arial";
       ctxFinal.fillText(`📚 CURSO: ${examenActual.curso}  |  N° LISTA: ${estudianteActual.n_lista}`, 40, 100);
 
-      // --- 2. Círculos Verdes/Rojos en la matriz de respuestas ---
+      // --- 2. Círculos Verdes/Rojos ---
       let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
       let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY]);
       let targetW = (opc + 1) * 40; let targetH = (cantP + 1) * 40;
@@ -480,77 +467,46 @@
       }
       MatrizInversa.delete(); srcTri.delete(); dstTri.delete();
 
-      // --- 3. SELLO DE RÚBRICAS Y NOTA (ESQUINA INFERIOR DERECHA) ---
-      let stampW = 600; 
-      let stampH = 150 + (listRubricasParaSello.length * 32);
-      let stampX = canvasFinal.width - stampW - 30;
-      let stampY = canvasFinal.height - stampH - 30;
+      // --- 3. SELLO INFERIOR DERECHO ---
+      let stampW = 600; let stampH = 150 + (listRubricasParaSello.length * 32);
+      let stampX = canvasFinal.width - stampW - 30; let stampY = canvasFinal.height - stampH - 30;
 
-      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.95)";
-      ctxFinal.fillRect(stampX, stampY, stampW, stampH);
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.95)"; ctxFinal.fillRect(stampX, stampY, stampW, stampH);
       ctxFinal.lineWidth = 4; ctxFinal.strokeStyle = "#000"; ctxFinal.strokeRect(stampX, stampY, stampW, stampH);
 
-      // Bloque Nota
-      ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial";
-      ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
+      ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial"; ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
+      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial"; ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
 
-      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial";
-      ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
-
-      // Bloque Rúbricas Mapeadas
-      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
-      ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
+      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial"; ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
       
-      let currentY = stampY + 175;
-      ctxFinal.font = "22px Arial";
+      let currentY = stampY + 175; ctxFinal.font = "22px Arial";
       for (let i=0; i<listRubricasParaSello.length; i++) {
           let texto = listRubricasParaSello[i];
           ctxFinal.fillStyle = texto.startsWith("✅") ? "green" : "red";
-          // WrapText dibujará y saltará a la siguiente línea si la frase es larga
           currentY = wrapText(ctxFinal, texto, stampX + 20, currentY, stampW - 40, 28) + 5;
       }
 
       finalBase64 = canvasFinal.toDataURL('image/jpeg', 0.85).split(',')[1];
+      
+      // Pasar la imagen al elemento <img> para descarga táctil por si acaso
+      document.getElementById('imgFinalDescarga').src = "data:image/jpeg;base64," + finalBase64;
     }
 
     function actualizarRespuestaManual(idx, valor) { arregloRespuestasManuales[idx] = valor; renderizarResultadosYEditor(); }
 
-    function guardarImagenLocal(base64, filename) {
-      try {
-        const link = document.createElement("a"); link.href = "data:image/jpeg;base64," + base64; link.download = filename + ".jpg";
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      } catch (e) { console.error("Descarga directa bloqueada", e); }
-    }
-
-    // EL ENVÍO A PRUEBA DE FALLOS CON DESCARGA PRIMERO
     async function enviarCalificacion() {
-      // Ocultar botones y mostrar carga
-      document.getElementById('reviewButtons').style.display = 'none'; 
-      document.getElementById('loaderUpload').style.display = 'block';
+      alert("Paso 1: Iniciando conexión con Google Sheets...");
+      document.getElementById('reviewButtons').style.display = 'none'; document.getElementById('loaderUpload').style.display = 'block';
 
-      // Crear el nombre del archivo final
       let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
       let t = examenActual.tipo.toUpperCase(); let tA="OT";
       if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
       let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
       finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
 
-      // SIEMPRE forzar la descarga de la imagen al celular primero
-      guardarImagenLocal(finalBase64, finalFileName);
-
-      let payload = { 
-        pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, 
-        tipo: examenActual.tipo, trimestre: examenActual.trimestre, 
-        nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, 
-        aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, 
-        totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, 
-        detalleRespuestas: dataEvaluacion.detalleRespuestas, 
-        preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, 
-        fileName: finalFileName 
-      };
+      let payload = { pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, tipo: examenActual.tipo, trimestre: examenActual.trimestre, nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, detalleRespuestas: dataEvaluacion.detalleRespuestas, preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, fileName: finalFileName };
 
       try {
-        // Envio tipo texto (Evita bloqueos CORS)
         let res = await fetch(SCRIPT_URL, { 
             method: "POST", 
             body: JSON.stringify(payload), 
@@ -561,16 +517,14 @@
         let result = await res.json();
         if (result.status === "success") { 
           showNotif("¡Nota enviada a Sheets con éxito!"); 
-          setTimeout(() => { switchPanel('panel-config'); }, 2200); 
-        } else {
-          throw new Error(result.message);
-        }
+          alert("Paso 2: Datos guardados en Excel. Por favor, mantenga el dedo sobre la foto de abajo para guardarla en su celular.");
+          document.getElementById('loaderUpload').style.display = 'none'; 
+        } else { throw new Error(result.message); }
       } catch (e) { 
-        alert("La foto se guardó en su galería, pero NO se pudo enviar a Google Sheets.\n\nRevise su Apps Script y asegúrese de haber creado una 'Nueva versión'.\nError: " + e.message); 
+        alert("Error crítico: " + e.message + "\n\n¿Creó una NUEVA VERSIÓN en Apps Script?"); 
         document.getElementById('reviewButtons').style.display = 'block'; 
-      } finally { 
         document.getElementById('loaderUpload').style.display = 'none'; 
-      }
+      } 
     }
   </script>
 </body>
