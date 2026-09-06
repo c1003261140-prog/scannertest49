@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OMR Scanner Pro - Sellos y Rúbricas Seguras</title>
+  <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --primary: #3b82f6; --success: #10b981; --danger: #ef4444; }
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; touch-action: pan-y; }
+    
+    header { background: #020617; padding: 14px; text-align: center; font-weight: bold; font-size: 1.15rem; box-shadow: 0 2px 10px rgba(0,0,0,0.5); position: sticky; top: 0; z-index: 50; }
+    .panel { display: none; flex-direction: column; padding: 15px; width: 100%; max-width: 600px; margin: 0 auto; box-sizing: border-box; }
+    .panel.active { display: flex; }
+
+    .card { background: var(--card); padding: 18px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .card label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .card select, .card input { width: 100%; padding: 12px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 6px; font-size: 1rem; margin-bottom: 10px; outline: none; box-sizing: border-box; }
+
+    .btn { padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; color: white; cursor: pointer; text-align: center; width: 100%; display: block; margin-bottom: 10px; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-blue { background: #0284c7; border: 2px solid #0369a1; } .btn-disabled { background: #475569; color: #94a3b8; pointer-events: none; }
+
+    .camera-wrapper { position: relative; width: 100%; aspect-ratio: 8.5/11; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 15px; border: 2px solid #3b82f6; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* LIENZO RECORTE MANUAL (Líneas Roja y Amarilla) */
+    .page-crop-stage { position: relative; width: 100%; aspect-ratio: 8.5/11; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 15px; touch-action: none; border: 2px solid #ea580c;}
+    #pageCropCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+    /* LIENZO ENCUADRE OMR AZUL */
+    .crop-stage { position: relative; width: 100%; aspect-ratio: 8.5/11; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 15px; touch-action: none; border: 2px solid #10b981;}
+    #cropCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+    .filter-panel { background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #3b82f6; text-align: center;}
+    .filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .filter-row label { font-size: 0.8rem; color: #94a3b8; width: 60px; font-weight: bold;}
+    .filter-row input[type=range] { flex: 1; margin: 0 10px; accent-color: #3b82f6; }
+    .filter-row span { font-size: 0.8rem; color: #f8fafc; width: 30px; text-align: right; }
+    
+    /* VISOR B/N 33% EXPANSIBLE */
+    .preview-bw { width: 33%; height: auto; background: #000; border: 1px solid #334155; border-radius: 6px; display: inline-block; margin: 8px auto 0 auto; cursor: pointer; transition: 0.3s ease; }
+    .preview-bw.expanded { width: 100%; }
+
+    /* FOTO FINAL COMPACTA */
+    .mini-canvas-container { position: relative; width: 100%; height: 140px; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; cursor: pointer; transition: 0.3s ease;}
+    .mini-canvas-container.expanded { height: 60vh; max-height: 500px; }
+    #canvasFinal { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .expand-hint { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; font-weight: bold; pointer-events: none;}
+
+    /* EDITOR MANUAL EN 2 COLUMNAS */
+    #manualEditor { background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #10b981; }
+    .editor-title { font-size: 0.95rem; font-weight: bold; color: #f8fafc; margin-bottom: 10px; text-align: center; border-bottom: 1px solid #334155; padding-bottom: 5px; }
+    #editorFilas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .edit-row { display: flex; flex-direction: column; align-items: center; padding: 6px; background: #0f172a; border-radius: 6px; border: 1px solid #334155;}
+    .edit-row span { font-size: 0.8rem; font-weight: bold; margin-bottom: 4px; text-align: center;}
+    .edit-row select { width: 100%; padding: 6px; background: #1e293b; color: white; border: 1px solid #3b82f6; border-radius: 4px; font-weight: bold; font-size: 0.9rem; text-align: center; outline: none; }
+    .c-ok { color: #10b981; } .c-err { color: #ef4444; }
+
+    .loader { text-align: center; padding: 15px; color: #38bdf8; font-weight: bold; display: none; }
+    #notif { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: var(--success); padding: 10px 20px; border-radius: 30px; font-weight: bold; display: none; z-index: 100; font-size: 0.9rem; }
+    .info-text { text-align: center; font-size: 0.95rem; margin-bottom: 10px; color: #94a3b8; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <header>OMR Scanner Pro</header>
+  <div id="notif">Notificación</div>
+
+  <!-- PANEL 0: LOGIN -->
+  <div id="panel-login" class="panel active">
+    <div class="card" style="margin-top: 25px; text-align: center;">
+      <div style="font-size: 2.5rem; margin-bottom: 10px;">🔒</div>
+      <h2 style="margin-top: 0;">Acceso Autorizado</h2>
+      <label style="text-align: left;">Ingrese su PIN de Seguridad:</label>
+      <input type="password" id="inputPin" placeholder="••••••••">
+      <button class="btn btn-primary" id="btnLogin" onclick="iniciarSesion()">Verificar e Ingresar</button>
+    </div>
+  </div>
+
+  <!-- PANEL 1: CONFIGURACIÓN -->
+  <div id="panel-config" class="panel">
+    <div class="card" id="selectionCard" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="color:#10b981; font-weight:bold; font-size:0.85rem;">✔️ PIN Válido</span>
+        <button onclick="cerrarSesion()" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:4px 8px; border-radius:4px; cursor:pointer;">Salir</button>
+      </div>
+      <label>1. Seleccionar Examen</label><select id="selExamen" onchange="actualizarListaEstudiantes()"><option value="">-- Elija un examen --</option></select>
+      <label>2. Estudiante</label><select id="selEstudiante"><option value="">-- Seleccione estudiante --</option></select>
+    </div>
+    <button class="btn btn-disabled" id="btnIniciarEscaneo" onclick="abrirCamara()">📸 1. Tomar Foto a la Hoja</button>
+  </div>
+
+  <!-- PANEL 2: FOTOGRAFÍA ESTÁTICA -->
+  <div id="panel-camera" class="panel">
+    <div class="info-text">Paso 1: Encuadre toda la hoja y capture.</div>
+    <button id="btnModo" class="btn btn-blue" onclick="toggleModo()">Modo Lectura: 📄 PAPEL</button>
+    
+    <div class="camera-wrapper">
+      <video id="videoElement" autoplay playsinline></video>
+    </div>
+    <button class="btn btn-success" onclick="capturarFotoFija()">📸 CAPTURAR FOTO</button>
+    <button class="btn btn-danger" onclick="volverAConfig()">❌ Cancelar</button>
+  </div>
+
+  <!-- PANEL 2.5: RECORTE MANUAL DE PÁGINA (Arriba y Abajo) -->
+  <div id="panel-page-crop" class="panel">
+    <div class="info-text" style="color: #ea580c;">Paso 1.5: Arrastre las líneas roja y amarilla para recortar el fondo (mesa).</div>
+    <div class="page-crop-stage" id="pageCropStage">
+      <canvas id="pageCropCanvas"></canvas>
+    </div>
+    <button class="btn btn-primary" onclick="confirmarRecortePagina()" style="background:#ea580c;">✂️ Aceptar Recorte</button>
+    <button class="btn btn-danger" onclick="reintentarCamara()">🔄 Volver a Tomar Foto</button>
+  </div>
+
+  <!-- PANEL 3: ENCUADRE OMR INTERACTIVO -->
+  <div id="panel-crop" class="panel">
+    <div class="info-text" style="color: #38bdf8;">Paso 2: Ajuste el área azul al recuadro de la hoja de respuestas.</div>
+    <div class="crop-stage" id="cropStage">
+      <canvas id="cropCanvas"></canvas>
+    </div>
+    <button class="btn btn-primary" onclick="iniciarFiltrosYEdicion()">⚡ LEER BURBUJAS</button>
+    <button class="btn btn-danger" onclick="reintentarCamara()">🔄 Volver a Tomar Foto</button>
+  </div>
+
+  <!-- PANEL 4: ESTUDIO B/N Y EDICIÓN -->
+  <div id="panel-review" class="panel">
+    
+    <!-- Visor de Binarización -->
+    <div class="filter-panel">
+      <div class="editor-title" style="border-color:#3b82f6; font-size:0.85rem;">VISOR DE LECTURA (B/N)</div>
+      <div class="filter-row"><label>Brillo</label><input type="range" id="slBrillo" min="-100" max="100" value="-25" oninput="aplicarFiltrosBinarizacion()"><span id="valBrillo">-25</span></div>
+      <div class="filter-row"><label>Contraste</label><input type="range" id="slContraste" min="10" max="40" value="24" oninput="aplicarFiltrosBinarizacion()"><span id="valContraste">2.4</span></div>
+      <div class="filter-row"><label>Lápiz</label><input type="range" id="slUmbral" min="100" max="250" value="168" oninput="aplicarFiltrosBinarizacion()"><span id="valUmbral">168</span></div>
+      
+      <!-- Visor miniatura que se expande al tocar -->
+      <canvas id="bwCanvasPreview" class="preview-bw" onclick="toggleExpandBW(this)"></canvas>
+      <div style="font-size:0.75rem; color:#94a3b8; text-align:center; margin-top:4px;">(Toque la imagen B/N para ampliarla)</div>
+    </div>
+
+    <!-- Fotografía Final Compacta con Sellos -->
+    <div class="mini-canvas-container" id="miniCanvasBox" onclick="toggleExpandCanvas()">
+      <canvas id="canvasFinal"></canvas>
+      <div class="expand-hint" id="expandHint">🔍 Toca para ampliar</div>
+    </div>
+    
+    <!-- Editor Manual en 2 Columnas -->
+    <div id="manualEditor">
+      <div class="editor-title">✏️ REVISIÓN MANUAL</div>
+      <div id="editorFilas"></div>
+    </div>
+
+    <div class="loader" id="loaderUpload">⏳ Guardando foto y subiendo datos...</div>
+    
+    <div id="reviewButtons">
+      <button class="btn btn-success" onclick="enviarCalificacion()">📥 CONFIRMAR Y SUBIR NOTA</button>
+      <button class="btn btn-danger" onclick="volverAConfig()">❌ Descartar</button>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT
+    // =========================================================================
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzqXj-zSdGB-Hi8NzFIZmczXHEfW2j9ya33Zj2Rw2SV199B7u8rIz8oKzFh3r9ReKSnCA/exec";
+
+    let dbExamenes = []; let dbEstudiantes = []; let examenActual = null; let estudianteActual = null;
+    let video = document.getElementById('videoElement');
+    let pageCropCanvas = document.getElementById('pageCropCanvas'); let pageCropCtx = pageCropCanvas.getContext('2d');
+    let cropCanvas = document.getElementById('cropCanvas'); let cropCtx = cropCanvas.getContext('2d');
+    let canvasFinal = document.getElementById('canvasFinal'); let ctxFinal = canvasFinal.getContext('2d');
+    let bwCanvas = document.getElementById('bwCanvasPreview'); let bwCtx = bwCanvas.getContext('2d');
+    
+    let stream = null; let opencvReady = false; let userPin = "";
+    let rawImage = null; let capturedImage = null; let warpedMatBase = null; 
+    let finalBase64 = ""; let dataEvaluacion = {}; let finalFileName = "";
+    let arregloRespuestasManuales = [];
+
+    // Recorte Manual
+    let pageTopY = 0; let pageBottomY = 0; let activePageLine = null;
+
+    let corners = []; let activeHandle = null; let dragOffset = {x:0, y:0};
+    let modoPantalla = false;
+
+    function onOpenCvReady() { opencvReady = true; }
+    function showNotif(msg, bg="var(--success)") { let n = document.getElementById('notif'); n.innerText=msg; n.style.background=bg; n.style.display='block'; setTimeout(()=>n.style.display='none',3000); }
+    function switchPanel(pid) { document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.getElementById(pid).classList.add('active'); window.scrollTo(0,0); }
+
+    function toggleExpandCanvas() { let box = document.getElementById('miniCanvasBox'); let hint = document.getElementById('expandHint'); box.classList.toggle('expanded'); hint.innerText = box.classList.contains('expanded') ? "Toca para reducir" : "🔍 Toca para ampliar"; }
+    function toggleExpandBW(el) { el.classList.toggle('expanded'); }
+    function toggleModo() { modoPantalla = !modoPantalla; let btn = document.getElementById('btnModo'); if (modoPantalla) { btn.innerText = "Modo Lectura: 💻 PANTALLA LED"; btn.style.background = "#ea580c"; btn.style.borderColor = "#c2410c"; showNotif("Filtro Pantalla Activado", "#ea580c"); } else { btn.innerText = "Modo Lectura: 📄 PAPEL"; btn.style.background = "#0284c7"; btn.style.borderColor = "#0369a1"; showNotif("Filtro Normal Activado"); } }
+
+    window.onload = () => { let savedPin = localStorage.getItem("omr_pin"); if(savedPin) { document.getElementById("inputPin").value = savedPin; } };
+
+    async function iniciarSesion() {
+      let pin = document.getElementById("inputPin").value.trim();
+      if (!pin) return;
+      document.getElementById("btnLogin").innerText = "⏳ Verificando..."; document.getElementById("btnLogin").classList.add("btn-disabled");
+      try {
+        let response = await fetch(SCRIPT_URL + "?pin=" + encodeURIComponent(pin)); let data = await response.json();
+        if (data.status === "error") { alert(data.message); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); return; }
+        userPin = pin; localStorage.setItem("omr_pin", pin);
+        dbExamenes = data.examenes; dbEstudiantes = data.estudiantes;
+        let selEx = document.getElementById('selExamen'); selEx.innerHTML = '<option value="">-- Elija un examen --</option>';
+        dbExamenes.forEach(ex => { let opt = document.createElement('option'); opt.value = ex.id; opt.innerText = `[${ex.id}] ${ex.tema}`; selEx.appendChild(opt); });
+        document.getElementById('selectionCard').style.display = 'block'; switchPanel('panel-config'); showNotif("✅ Acceso Concedido");
+      } catch (err) { alert("Error de conexión a Sheets."); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
+    }
+
+    function cerrarSesion() { userPin = ""; localStorage.removeItem("omr_pin"); document.getElementById("inputPin").value = ""; document.getElementById("selectionCard").style.display = "none"; switchPanel("panel-login"); }
+
+    function actualizarListaEstudiantes() {
+      examenActual = dbExamenes.find(e => e.id === document.getElementById('selExamen').value);
+      let selEst = document.getElementById('selEstudiante'); selEst.innerHTML = '<option value="">-- Seleccione estudiante --</option>';
+      if (examenActual) {
+        let filtrados = dbEstudiantes.filter(est => est.curso === examenActual.curso);
+        filtrados.forEach(est => { let opt = document.createElement('option'); opt.value = JSON.stringify(est); opt.innerText = `N° ${est.n_lista} - ${est.nombre}`; selEst.appendChild(opt); });
+        document.getElementById('btnIniciarEscaneo').classList.replace('btn-disabled', 'btn-primary');
+      } else { document.getElementById('btnIniciarEscaneo').classList.replace('btn-primary', 'btn-disabled'); }
+    }
+
+    async function abrirCamara() {
+      switchPanel('panel-camera');
+      const constraints = { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: "continuous" }] } };
+      try { stream = await navigator.mediaDevices.getUserMedia(constraints); video.srcObject = stream; } catch (err) { alert("Permita acceso a la cámara."); }
+    }
+
+    function detenerCamara() { if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; } }
+    function volverAConfig() { detenerCamara(); switchPanel('panel-config'); }
+    function reintentarCamara() { switchPanel('panel-camera'); }
+
+    function capturarFotoFija() {
+      rawImage = document.createElement('canvas');
+      rawImage.width = video.videoWidth; rawImage.height = video.videoHeight;
+      rawImage.getContext('2d').drawImage(video, 0, 0);
+      detenerCamara(); iniciarRecortePagina();
+    }
+
+    // PASO 1.5: RECORTE MANUAL
+    function iniciarRecortePagina() {
+      switchPanel('panel-page-crop');
+      pageCropCanvas.width = pageCropCanvas.clientWidth;
+      pageCropCanvas.height = pageCropCanvas.clientHeight;
+      pageTopY = pageCropCanvas.height * 0.05;
+      pageBottomY = pageCropCanvas.height * 0.95;
+      dibujarPageCrop();
+    }
+
+    function dibujarPageCrop() {
+      pageCropCtx.clearRect(0, 0, pageCropCanvas.width, pageCropCanvas.height);
+      pageCropCtx.drawImage(rawImage, 0, 0, pageCropCanvas.width, pageCropCanvas.height);
+      
+      pageCropCtx.fillStyle = "rgba(0,0,0,0.6)"; pageCropCtx.fillRect(0, 0, pageCropCanvas.width, pageTopY);
+      pageCropCtx.fillRect(0, pageBottomY, pageCropCanvas.width, pageCropCanvas.height - pageBottomY);
+      
+      pageCropCtx.beginPath(); pageCropCtx.moveTo(0, pageTopY); pageCropCtx.lineTo(pageCropCanvas.width, pageTopY);
+      pageCropCtx.lineWidth = 4; pageCropCtx.strokeStyle = "red"; pageCropCtx.stroke();
+      
+      pageCropCtx.beginPath(); pageCropCtx.moveTo(0, pageBottomY); pageCropCtx.lineTo(pageCropCanvas.width, pageBottomY);
+      pageCropCtx.lineWidth = 4; pageCropCtx.strokeStyle = "yellow"; pageCropCtx.stroke();
+    }
+
+    pageCropCanvas.addEventListener('pointerdown', (e) => {
+      let rect = pageCropCanvas.getBoundingClientRect(); let y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      if (Math.abs(y - pageTopY) < 30) activePageLine = "top";
+      else if (Math.abs(y - pageBottomY) < 30) activePageLine = "bottom";
+      else activePageLine = null;
+    });
+
+    pageCropCanvas.addEventListener('pointermove', (e) => {
+      if (!activePageLine) return;
+      let rect = pageCropCanvas.getBoundingClientRect(); let y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      if (activePageLine === "top") pageTopY = Math.max(0, Math.min(pageBottomY - 50, y));
+      if (activePageLine === "bottom") pageBottomY = Math.max(pageTopY + 50, Math.min(pageCropCanvas.height, y));
+      dibujarPageCrop();
+    });
+    window.addEventListener('pointerup', () => { activePageLine = null; });
+
+    function confirmarRecortePagina() {
+      let scaleY = rawImage.height / pageCropCanvas.height;
+      let realTop = pageTopY * scaleY; let realBottom = pageBottomY * scaleY; let realHeight = realBottom - realTop;
+
+      capturedImage = document.createElement('canvas');
+      capturedImage.width = rawImage.width; capturedImage.height = realHeight;
+      capturedImage.getContext('2d').drawImage(rawImage, 0, realTop, rawImage.width, realHeight, 0, 0, rawImage.width, realHeight);
+      iniciarEtapaEncuadre();
+    }
+
+    // PASO 2: ENCUADRE OMR AZUL
+    function iniciarEtapaEncuadre() {
+      switchPanel('panel-crop');
+      cropCanvas.width = cropCanvas.clientWidth; cropCanvas.height = cropCanvas.clientHeight;
+      let w = cropCanvas.width; let h = cropCanvas.height;
+      corners = [ { x: w * 0.55, y: h * 0.15 }, { x: w * 0.95, y: h * 0.15 }, { x: w * 0.95, y: h * 0.85 }, { x: w * 0.55, y: h * 0.85 } ];
+      dibujarEncuadre();
+    }
+
+    function dibujarEncuadre() {
+      cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.drawImage(capturedImage, 0, 0, cropCanvas.width, cropCanvas.height);
+
+      cropCtx.beginPath(); cropCtx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 4; i++) cropCtx.lineTo(corners[i].x, corners[i].y);
+      cropCtx.closePath();
+      
+      cropCtx.lineWidth = 3; cropCtx.strokeStyle = "#3b82f6"; cropCtx.fillStyle = "rgba(59, 130, 246, 0.25)";
+      cropCtx.fill(); cropCtx.stroke();
+
+      let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x)/4;
+      let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y)/4;
+      cropCtx.beginPath(); cropCtx.arc(cx, cy, 10, 0, 2*Math.PI); cropCtx.fillStyle = "rgba(255,255,255,0.8)"; cropCtx.fill();
+
+      corners.forEach((c) => {
+        cropCtx.beginPath(); cropCtx.arc(c.x, c.y, 18, 0, 2 * Math.PI);
+        cropCtx.fillStyle = "rgba(59, 130, 246, 0.8)"; cropCtx.fill();
+        cropCtx.lineWidth = 2; cropCtx.strokeStyle = "#ffffff"; cropCtx.stroke();
+      });
+    }
+
+    function getTouchPos(e) { let rect = cropCanvas.getBoundingClientRect(); let cx = e.touches ? e.touches[0].clientX : e.clientX; let cy = e.touches ? e.touches[0].clientY : e.clientY; return { x: cx - rect.left, y: cy - rect.top }; }
+    function distToSegment(p, v, w) { let l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2); if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y); let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2; t = Math.max(0, Math.min(1, t)); return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y))); }
+    function pointInPolygon(point, vs) { let x = point.x, y = point.y; let inside = false; for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) { let xi = vs[i].x, yi = vs[i].y; let xj = vs[j].x, yj = vs[j].y; let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi); if (intersect) inside = !inside; } return inside; }
+
+    cropCanvas.addEventListener('pointerdown', (e) => {
+      let pos = getTouchPos(e); activeHandle = null;
+      for (let i=0; i<4; i++) { if (Math.hypot(corners[i].x - pos.x, corners[i].y - pos.y) < 35) { activeHandle = i; return; } }
+      if (pointInPolygon(pos, corners)) { activeHandle = "center"; dragOffset = pos; return; }
+      for (let i=0; i<4; i++) { let j = (i + 1) % 4; if (distToSegment(pos, corners[i], corners[j]) < 30) { activeHandle = `edge_${i}`; dragOffset = pos; return; } }
+    });
+
+    cropCanvas.addEventListener('pointermove', (e) => {
+      if (activeHandle === null) return;
+      let pos = getTouchPos(e); let dx = pos.x - dragOffset.x; let dy = pos.y - dragOffset.y;
+      if (typeof activeHandle === 'number') { corners[activeHandle].x = Math.max(0, Math.min(cropCanvas.width, pos.x)); corners[activeHandle].y = Math.max(0, Math.min(cropCanvas.height, pos.y)); } 
+      else if (activeHandle === "center") { corners.forEach(c => { c.x += dx; c.y += dy; }); dragOffset = pos; } 
+      else if (activeHandle.startsWith("edge_")) { let edgeIdx = parseInt(activeHandle.split("_")[1]); let nextIdx = (edgeIdx + 1) % 4; corners[edgeIdx].x += dx; corners[edgeIdx].y += dy; corners[nextIdx].x += dx; corners[nextIdx].y += dy; dragOffset = pos; }
+      dibujarEncuadre();
+    });
+    window.addEventListener('pointerup', () => { activeHandle = null; });
+
+    function volverAlCrop() { switchPanel('panel-crop'); }
+
+    // PASO 3: APLANADO Y FILTROS B/N
+    function iniciarFiltrosYEdicion() {
+      if (!opencvReady) { alert("Cargando motor..."); return; }
+
+      let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
+      let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY ]);
+
+      let cantP = examenActual.cant_preguntas; let opc = examenActual.opciones;
+      let targetW = (opc + 1) * 40; let targetH = (cantP + 1) * 40;
+      let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, targetW, 0, targetW, targetH, 0, targetH]);
+
+      let src = cv.imread(capturedImage);
+      if (warpedMatBase) warpedMatBase.delete(); warpedMatBase = new cv.Mat();
+      cv.warpPerspective(src, warpedMatBase, cv.getPerspectiveTransform(srcTri, dstTri), new cv.Size(targetW, targetH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255));
+
+      src.delete(); srcTri.delete(); dstTri.delete();
+      switchPanel('panel-review'); aplicarFiltrosBinarizacion();
+    }
+
+    function aplicarFiltrosBinarizacion() {
+      let valB = parseInt(document.getElementById('slBrillo').value); let valC = parseInt(document.getElementById('slContraste').value) / 10; let valU = parseInt(document.getElementById('slUmbral').value);
+      document.getElementById('valBrillo').innerText = valB; document.getElementById('valContraste').innerText = valC.toFixed(1); document.getElementById('valUmbral').innerText = valU;
+
+      let gray = new cv.Mat(); cv.cvtColor(warpedMatBase, gray, cv.COLOR_RGBA2GRAY, 0);
+      if (modoPantalla) { let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(9, 9), 0); blur.copyTo(gray); blur.delete(); }
+
+      let adjusted = new cv.Mat(); gray.convertTo(adjusted, -1, valC, valB);
+      let binarized = new cv.Mat(); cv.threshold(adjusted, binarized, valU, 255, cv.THRESH_BINARY_INV);
+
+      cv.imshow(bwCanvas, binarized);
+      leerRespuestasDeBinarizado(binarized);
+      gray.delete(); adjusted.delete(); binarized.delete();
+    }
+
+    function leerRespuestasDeBinarizado(binMat) {
+      let cantP = examenActual.cant_preguntas; let opc = examenActual.opciones;
+      arregloRespuestasManuales = [];
+
+      for (let r = 0; r < cantP; r++) {
+        let maxBlancos = 0; let idxM = -1;
+        for (let c = 0; c < opc; c++) {
+          let cx = (c + 1) * 40 + 16; let cy = (r + 1) * 40 + 16;
+          let scanW = 10; let scanH = 10;
+          let rx = Math.max(0, cx - scanW/2); let ry = Math.max(0, cy - scanH/2);
+          let rectScan = new cv.Rect(rx, ry, scanW, scanH);
+          
+          if(rectScan.x + rectScan.width <= binMat.cols && rectScan.y + rectScan.height <= binMat.rows) {
+            let roi = binMat.roi(rectScan); let pixelCount = cv.countNonZero(roi); roi.delete();
+            if (pixelCount > maxBlancos && pixelCount >= 5) { maxBlancos = pixelCount; idxM = c; }
+          }
+        }
+        let letras = ["A", "B", "C", "D"]; arregloRespuestasManuales.push(idxM >= 0 ? letras[idxM] : "BLANCO");
+      }
+      renderizarResultadosYEditor();
+    }
+
+    function wrapText(context, text, x, y, maxWidth, lineHeight) {
+        var words = text.split(' '); var line = '';
+        for(var n = 0; n < words.length; n++) {
+          var testLine = line + words[n] + ' '; var metrics = context.measureText(testLine);
+          if (metrics.width > maxWidth && n > 0) { context.fillText(line, x, y); line = words[n] + ' '; y += lineHeight; } 
+          else { line = testLine; }
+        }
+        context.fillText(line, x, y); return y + lineHeight;
+    }
+
+    function renderizarResultadosYEditor() {
+      let cantP = examenActual.cant_preguntas; let clave = examenActual.clave; let opc = examenActual.opciones;
+      let aciertos = 0; let detalleArray = []; let incorrectasArray = []; let html = "";
+      
+      let listFallas = []; 
+
+      // RECUPERACIÓN SEGURA DE RÚBRICAS (A prueba de errores si el Excel usó comas)
+      let rawRubF = examenActual.rubF || "";
+      let arrRubF = rawRubF.includes("|") ? rawRubF.split("|") : rawRubF.split(",");
+
+      for (let i = 0; i < cantP; i++) {
+        let lC = clave[i]; let lM = arregloRespuestasManuales[i]; let esCorrecta = (lM === lC);
+        if (esCorrecta) aciertos++; 
+        else {
+            incorrectasArray.push(i+1);
+            let feedback = arrRubF[i] ? arrRubF[i].trim() : "Revisar el ejercicio.";
+            listFallas.push(`P${i+1}: ${feedback}`);
+        }
+        detalleArray.push(`${i+1}:${lM}(${esCorrecta?'OK':'❌'+lC})`);
+
+        let opts = ["A", "B", "C", "D"].slice(0, opc); opts.push("BLANCO");
+        let optString = opts.map(o => `<option value="${o}" ${o===lM?'selected':''}>${o}</option>`).join("");
+        let classColor = esCorrecta ? 'c-ok' : 'c-err';
+        
+        html += `<div class="edit-row"><span class="${classColor}">P${i+1}. (Resp: ${lC})</span><select onchange="actualizarRespuestaManual(${i}, this.value)">${optString}</select></div>`;
+      }
+
+      document.getElementById('editorFilas').innerHTML = html;
+
+      let notaSobre100 = Math.round((aciertos / cantP) * 100);
+      dataEvaluacion = { aciertos: aciertos, fallos: cantP - aciertos, totalPreguntas: cantP, nota100: notaSobre100, detalleRespuestas: detalleArray.join(", "), preguntasIncorrectas: incorrectasArray.length > 0 ? incorrectasArray.join(", ") : "Ninguna" };
+
+      // DIBUJAR LA FOTO RECORTADA (SIN LA MESA DE FONDO)
+      canvasFinal.width = capturedImage.width; 
+      canvasFinal.height = capturedImage.height;
+      ctxFinal.drawImage(capturedImage, 0, 0);
+
+      // --- SELLOS DE AGUA ---
+
+      // 1. Sello Superior (Nombre y Curso)
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctxFinal.fillRect(20, 20, 750, 110);
+      ctxFinal.lineWidth = 3; ctxFinal.strokeStyle = "black"; ctxFinal.strokeRect(20, 20, 750, 110);
+      
+      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 35px Arial";
+      ctxFinal.fillText(`👤 ALUMNO: ${estudianteActual.nombre}`, 40, 65);
+      ctxFinal.font = "28px Arial";
+      ctxFinal.fillText(`📚 CURSO: ${examenActual.curso}  |  N° LISTA: ${estudianteActual.n_lista}`, 40, 100);
+
+      // 2. Círculos de revisión en la hoja OMR
+      let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
+      let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY]);
+      let targetW = (opc + 1) * 40; let targetH = (cantP + 1) * 40;
+      let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, targetW, 0, targetW, targetH, 0, targetH]);
+      let MatrizInversa = cv.getPerspectiveTransform(dstTri, srcTri);
+
+      for (let r = 0; r < cantP; r++) {
+        let lM = arregloRespuestasManuales[r]; let lC = clave[r];
+        let idxM = ["A", "B", "C", "D"].indexOf(lM);
+        if (idxM >= 0) {
+          let cx = (idxM + 1) * 40 + 16; let cy = (r + 1) * 40 + 16;
+          let ptMat = cv.matFromArray(1, 1, cv.CV_32FC2, [cx, cy]); let outMat = new cv.Mat();
+          cv.perspectiveTransform(ptMat, outMat, MatrizInversa);
+          
+          let color = (lM === lC) ? "green" : "red";
+          ctxFinal.beginPath(); ctxFinal.lineWidth=5; ctxFinal.strokeStyle=color;
+          ctxFinal.arc(outMat.data32F[0], outMat.data32F[1], 16, 0, 2*Math.PI); ctxFinal.stroke();
+          ptMat.delete(); outMat.delete();
+        }
+      }
+      MatrizInversa.delete(); srcTri.delete(); dstTri.delete();
+
+      // 3. Sello de la NOTA y Rúbricas (ESQUINA INFERIOR DERECHA)
+      let stampW = 550; 
+      let stampH = listFallas.length > 0 ? 150 + (listFallas.length * 35) : 150;
+      let stampX = canvasFinal.width - stampW - 30;
+      let stampY = canvasFinal.height - stampH - 30;
+
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctxFinal.fillRect(stampX, stampY, stampW, stampH);
+      ctxFinal.lineWidth = 4; ctxFinal.strokeStyle = "#000"; ctxFinal.strokeRect(stampX, stampY, stampW, stampH);
+
+      ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial";
+      ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
+
+      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 28px Arial";
+      ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
+
+      if (listFallas.length > 0) {
+          ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
+          ctxFinal.fillText("SUGERENCIAS DE MEJORA:", stampX + 20, stampY + 140);
+          ctxFinal.font = "22px Arial";
+          let currentY = stampY + 175;
+          for (let i=0; i<listFallas.length; i++) {
+              currentY = wrapText(ctxFinal, listFallas[i], stampX + 20, currentY, stampW - 40, 28) + 5;
+          }
+      } else {
+          ctxFinal.fillStyle = "green"; ctxFinal.font = "bold 28px Arial";
+          ctxFinal.fillText("¡Excelente trabajo! Sin errores.", stampX + 20, stampY + 140);
+      }
+
+      finalBase64 = canvasFinal.toDataURL('image/jpeg', 0.85).split(',')[1];
+    }
+
+    function actualizarRespuestaManual(idx, valor) { arregloRespuestasManuales[idx] = valor; renderizarResultadosYEditor(); }
+
+    function guardarImagenLocal(base64, filename) {
+      try {
+        const link = document.createElement("a"); link.href = "data:image/jpeg;base64," + base64; link.download = filename + ".jpg";
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      } catch (e) { console.error(e); }
+    }
+
+    async function enviarCalificacion() {
+      // DESCARGA LA IMAGEN AL CELULAR PRIMERO (Sin importar si el internet falla)
+      let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
+      let t = examenActual.tipo.toUpperCase(); let tA="OT";
+      if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
+      let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
+      finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
+
+      guardarImagenLocal(finalBase64, finalFileName);
+
+      document.getElementById('reviewButtons').style.display = 'none'; document.getElementById('loaderUpload').style.display = 'block';
+
+      let payload = { pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, tipo: examenActual.tipo, trimestre: examenActual.trimestre, nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, detalleRespuestas: dataEvaluacion.detalleRespuestas, preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, fileName: finalFileName };
+
+      try {
+        // Envio tipo texto (Evita bloqueos de seguridad de Google)
+        let res = await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "text/plain;charset=utf-8" } }); 
+        
+        // Verifica si la URL era de Edit en lugar de Exec
+        if (res.headers.get("content-type") && res.headers.get("content-type").includes("text/html")) {
+          throw new Error("La URL de Google Apps Script es incorrecta. Asegúrese de que termina en /exec y NO en /edit.");
+        }
+
+        let result = await res.json();
+        if (result.status === "success") { 
+          showNotif("¡Nota enviada a Sheets con éxito!"); 
+          setTimeout(() => { switchPanel('panel-config'); }, 2200); 
+        } 
+        else throw new Error(result.message);
+      } catch (e) { 
+        alert(e.message + "\n\n(La foto ya se descargó a su celular, revise su galería)."); 
+        document.getElementById('reviewButtons').style.display = 'block'; 
+      } 
+      finally { document.getElementById('loaderUpload').style.display = 'none'; }
+    }
+  </script>
+</body>
+</html>
