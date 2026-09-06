@@ -520,39 +520,64 @@
     }
 
     async function enviarCalificacion() {
-      // DESCARGA LA IMAGEN AL CELULAR PRIMERO (Sin importar si el internet falla)
+      // 1. Bloqueamos los botones para evitar dobles clics
+      document.getElementById('reviewButtons').style.display = 'none'; 
+      document.getElementById('loaderUpload').style.display = 'block';
+
+      // 2. Generamos el nombre del archivo
       let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
       let t = examenActual.tipo.toUpperCase(); let tA="OT";
       if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
       let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
       finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
 
-      guardarImagenLocal(finalBase64, finalFileName);
-
-      document.getElementById('reviewButtons').style.display = 'none'; document.getElementById('loaderUpload').style.display = 'block';
-
-      let payload = { pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, tipo: examenActual.tipo, trimestre: examenActual.trimestre, nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, detalleRespuestas: dataEvaluacion.detalleRespuestas, preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, fileName: finalFileName };
-
+      // 3. INTENTO DE DESCARGA PROTEGIDO (Si el celular lo bloquea, no colapsa)
       try {
-        // Envio tipo texto (Evita bloqueos de seguridad de Google)
-        let res = await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "text/plain;charset=utf-8" } }); 
-        
-        // Verifica si la URL era de Edit en lugar de Exec
-        if (res.headers.get("content-type") && res.headers.get("content-type").includes("text/html")) {
-          throw new Error("La URL de Google Apps Script es incorrecta. Asegúrese de que termina en /exec y NO en /edit.");
-        }
+        const link = document.createElement("a"); 
+        link.href = "data:image/jpeg;base64," + finalBase64; 
+        link.download = finalFileName + ".jpg";
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link);
+      } catch (err) {
+        console.warn("El navegador bloqueó la descarga de la imagen, pero continuará el envío a Sheets.");
+      }
 
+      // 4. PREPARAR DATOS PARA SHEETS
+      let payload = { 
+        pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, 
+        tipo: examenActual.tipo, trimestre: examenActual.trimestre, 
+        nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, 
+        aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, 
+        totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, 
+        detalleRespuestas: dataEvaluacion.detalleRespuestas, 
+        preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, 
+        fileName: finalFileName 
+      };
+
+      // 5. ENVÍO A GOOGLE SHEETS A PRUEBA DE FALLOS
+      try {
+        let res = await fetch(SCRIPT_URL, { 
+            method: "POST", 
+            body: JSON.stringify(payload), 
+            headers: { "Content-Type": "text/plain;charset=utf-8" } 
+        }); 
+        
         let result = await res.json();
+        
         if (result.status === "success") { 
           showNotif("¡Nota enviada a Sheets con éxito!"); 
-          setTimeout(() => { switchPanel('panel-config'); }, 2200); 
-        } 
-        else throw new Error(result.message);
+          setTimeout(() => { switchPanel('panel-config'); }, 2500); 
+        } else {
+          throw new Error(result.message);
+        }
+        
       } catch (e) { 
-        alert(e.message + "\n\n(La foto ya se descargó a su celular, revise su galería)."); 
+        alert("Error: No se pudo enviar a Google Sheets.\n\nCausa probable: Su enlace SCRIPT_URL está vacío o no se creó una 'Nueva versión' en Apps Script.\n\nDetalle: " + e.message); 
         document.getElementById('reviewButtons').style.display = 'block'; 
-      } 
-      finally { document.getElementById('loaderUpload').style.display = 'none'; }
+      } finally { 
+        document.getElementById('loaderUpload').style.display = 'none'; 
+      }
     }
   </script>
 </body>
