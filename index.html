@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OMR Scanner Pro - Botones Separados</title>
+  <title>OMR Scanner Pro - Diagnóstico de Red</title>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>
   <style>
     :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --primary: #3b82f6; --success: #10b981; --danger: #ef4444; }
@@ -42,10 +42,10 @@
     .preview-bw { width: 33%; height: auto; background: #000; border: 1px solid #334155; border-radius: 6px; display: inline-block; margin: 8px auto 0 auto; cursor: pointer; transition: 0.3s ease; }
     .preview-bw.expanded { width: 100%; }
 
-    /* FOTO FINAL VISIBLE PARA DESCARGA MANUAL OPCIONAL */
+    /* CONTENEDOR FOTO FINAL: Corregido error de imagen rota */
     .mini-canvas-container { position: relative; width: 100%; height: auto; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; text-align: center; background:#000;}
-    #canvasFinal { width: 100%; height: auto; object-fit: contain; background: #000; display: none; }
-    #imgFinalDescarga { width: 100%; height: auto; object-fit: contain; display: block; max-height: 50vh;}
+    #canvasFinal { display: none; }
+    #imgFinalDescarga { width: 100%; height: auto; object-fit: contain; display: none; max-height: 50vh;} /* Oculto hasta que haya foto real */
 
     /* EDITOR MANUAL EN 2 COLUMNAS */
     #manualEditor { background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #10b981; }
@@ -133,10 +133,10 @@
       <div style="font-size:0.75rem; color:#94a3b8; text-align:center; margin-top:4px;">(Toque la imagen B/N para ampliarla)</div>
     </div>
 
-    <!-- Fotografía Final Compacta Convertida a <img> para facilitar descarga táctil -->
+    <!-- Fotografía Final Compacta Convertida a <img> (Soluciona la imagen rota inicial) -->
     <div class="mini-canvas-container">
       <canvas id="canvasFinal"></canvas>
-      <img id="imgFinalDescarga" src="" alt="Examen Evaluado">
+      <img id="imgFinalDescarga" alt="Examen Evaluado">
     </div>
     
     <div id="manualEditor">
@@ -144,7 +144,7 @@
       <div id="editorFilas"></div>
     </div>
 
-    <div class="loader" id="loaderUpload">⏳ Conectando...</div>
+    <div class="loader" id="loaderUpload">⏳ Conectando con Google Sheets...</div>
     
     <div id="reviewButtons">
       <button class="btn btn-blue" onclick="descargarImagenManual()">💾 PASO 1: DESCARGAR IMAGEN</button>
@@ -155,7 +155,7 @@
 
   <script>
     // =========================================================================
-    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT (CUALQUIER PERSONA)
+    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT (CON /EXEC AL FINAL)
     // =========================================================================
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbdnobu9aBFhXkZEfY8g2TeCiK4HEvjB6Rujp5h3O-PuJsd9j7xIj1JikgHlICXfgAAw/exec";
 
@@ -197,7 +197,7 @@
         let selEx = document.getElementById('selExamen'); selEx.innerHTML = '<option value="">-- Elija un examen --</option>';
         dbExamenes.forEach(ex => { let opt = document.createElement('option'); opt.value = ex.id; opt.innerText = `[${ex.id}] ${ex.tema}`; selEx.appendChild(opt); });
         document.getElementById('selectionCard').style.display = 'block'; switchPanel('panel-config'); showNotif("✅ Acceso Concedido");
-      } catch (err) { alert("Error de conexión. Verifique su URL de SCRIPT_URL o su internet."); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
+      } catch (err) { alert("Error crítico de conexión: Verifique que su URL termine en /exec y que Apps Script tenga permisos de 'Cualquier persona'."); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
     }
 
     function cerrarSesion() { userPin = ""; localStorage.removeItem("omr_pin"); document.getElementById("inputPin").value = ""; document.getElementById("selectionCard").style.display = "none"; switchPanel("panel-login"); }
@@ -229,7 +229,7 @@
       detenerCamara(); iniciarRecortePagina();
     }
 
-    // PASO 1.5: RECORTE MANUAL
+    // PASO 1.5: RECORTE MANUAL LIMITADO MATEMÁTICAMENTE (Evita crear foto tamaño cero)
     function iniciarRecortePagina() {
       switchPanel('panel-page-crop');
       pageCropCanvas.width = pageCropCanvas.clientWidth;
@@ -263,8 +263,9 @@
     pageCropCanvas.addEventListener('pointermove', (e) => {
       if (!activePageLine) return;
       let rect = pageCropCanvas.getBoundingClientRect(); let y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-      if (activePageLine === "top") pageTopY = Math.max(0, Math.min(pageBottomY - 50, y));
-      if (activePageLine === "bottom") pageBottomY = Math.max(pageTopY + 50, Math.min(pageCropCanvas.height, y));
+      // Límite de 100px para que las líneas nunca se crucen y no generen un canvas roto
+      if (activePageLine === "top") pageTopY = Math.max(0, Math.min(pageBottomY - 100, y));
+      if (activePageLine === "bottom") pageBottomY = Math.max(pageTopY + 100, Math.min(pageCropCanvas.height, y));
       dibujarPageCrop();
     });
     window.addEventListener('pointerup', () => { activePageLine = null; });
@@ -333,7 +334,7 @@
 
     // PASO 3: APLANADO Y FILTROS B/N
     function iniciarFiltrosYEdicion() {
-      if (!opencvReady) { alert("Cargando motor..."); return; }
+      if (!opencvReady) { alert("Cargando motor OpenCV..."); return; }
 
       let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
       let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY ]);
@@ -427,18 +428,19 @@
       let notaSobre100 = Math.round((aciertos / cantP) * 100);
       dataEvaluacion = { aciertos: aciertos, fallos: cantP - aciertos, totalPreguntas: cantP, nota100: notaSobre100, detalleRespuestas: detalleArray.join(", "), preguntasIncorrectas: incorrectasArray.length > 0 ? incorrectasArray.join(", ") : "Ninguna" };
 
-      // GENERAR NOMBRE DEL ARCHIVO PARA QUE ESTÉ LISTO AL DESCARGAR
+      // GENERAR NOMBRE DEL ARCHIVO
       let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
       let t = examenActual.tipo.toUpperCase(); let tA="OT";
       if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
       let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
       finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
 
+      // DIBUJAR LA FOTO Y SELLOS
       canvasFinal.width = capturedImage.width; 
       canvasFinal.height = capturedImage.height;
       ctxFinal.drawImage(capturedImage, 0, 0);
 
-      // --- 1. Sello Superior ---
+      // 1. Sello Superior (Nombre y Curso)
       ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)";
       ctxFinal.fillRect(20, 20, 750, 110);
       ctxFinal.lineWidth = 3; ctxFinal.strokeStyle = "black"; ctxFinal.strokeRect(20, 20, 750, 110);
@@ -448,7 +450,7 @@
       ctxFinal.font = "28px Arial";
       ctxFinal.fillText(`📚 CURSO: ${examenActual.curso}  |  N° LISTA: ${estudianteActual.n_lista}`, 40, 100);
 
-      // --- 2. Círculos Verdes/Rojos ---
+      // 2. Círculos Verdes/Rojos
       let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
       let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY]);
       let targetW = (opc + 1) * 40; let targetH = (cantP + 1) * 40;
@@ -471,7 +473,7 @@
       }
       MatrizInversa.delete(); srcTri.delete(); dstTri.delete();
 
-      // --- 3. SELLO INFERIOR DERECHO ---
+      // 3. SELLO INFERIOR DERECHO CON RÚBRICAS
       let stampW = 600; 
       let stampH = 150 + (listRubricasParaSello.length * 32);
       let stampX = canvasFinal.width - stampW - 30;
@@ -481,14 +483,12 @@
       ctxFinal.fillRect(stampX, stampY, stampW, stampH);
       ctxFinal.lineWidth = 4; ctxFinal.strokeStyle = "#000"; ctxFinal.strokeRect(stampX, stampY, stampW, stampH);
 
-      // Bloque Nota
       ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial";
       ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
 
       ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial";
       ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
 
-      // Bloque Rúbricas Mapeadas
       ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
       ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
       
@@ -502,8 +502,10 @@
 
       finalBase64 = canvasFinal.toDataURL('image/jpeg', 0.85).split(',')[1];
       
-      // Mostrar la imagen final en el elemento <img> (Para que se pueda guardar manteniendo el dedo)
-      document.getElementById('imgFinalDescarga').src = "data:image/jpeg;base64," + finalBase64;
+      // Mostrar la imagen real en un tag <img> para evitar el "icono de imagen rota" inicial
+      let imgTag = document.getElementById('imgFinalDescarga');
+      imgTag.src = "data:image/jpeg;base64," + finalBase64;
+      imgTag.style.display = "block"; // Se muestra cuando ya tiene foto
     }
 
     function actualizarRespuestaManual(idx, valor) { arregloRespuestasManuales[idx] = valor; renderizarResultadosYEditor(); }
@@ -523,7 +525,7 @@
       }
     }
 
-    // BOTÓN 2: ENVIAR A SHEETS (A PRUEBA DE FALLOS)
+    // BOTÓN 2: ENVIAR A SHEETS (A PRUEBA DE FALLOS CON MENSAJE DETALLADO)
     async function enviarCalificacion() {
       document.getElementById('reviewButtons').style.display = 'none'; 
       document.getElementById('loaderUpload').style.display = 'block';
@@ -543,7 +545,8 @@
         let res = await fetch(SCRIPT_URL, { 
             method: "POST", 
             body: JSON.stringify(payload), 
-            headers: { "Content-Type": "text/plain;charset=utf-8" }
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            redirect: "follow"
         }); 
         
         let result = await res.json();
@@ -556,7 +559,7 @@
         }
         
       } catch (e) { 
-        alert("Error de envío a Google Sheets.\n\n" + e.message); 
+        alert("🚨 ERROR DE ENVÍO A GOOGLE SHEETS 🚨\n\nCausas posibles:\n1. Su enlace SCRIPT_URL está incompleto.\n2. Al implementar Apps Script no seleccionó 'Cualquier Persona'.\n3. Una pestaña de Excel tiene un nombre equivocado.\n\nDetalle técnico: " + e.message); 
         document.getElementById('reviewButtons').style.display = 'flex'; 
       } finally { 
         document.getElementById('loaderUpload').style.display = 'none'; 
