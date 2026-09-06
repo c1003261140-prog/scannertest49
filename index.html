@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OMR Scanner Pro - Diagnóstico</title>
+  <title>OMR Scanner Pro - Botones Separados</title>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>
   <style>
     :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --primary: #3b82f6; --success: #10b981; --danger: #ef4444; }
@@ -42,11 +42,10 @@
     .preview-bw { width: 33%; height: auto; background: #000; border: 1px solid #334155; border-radius: 6px; display: inline-block; margin: 8px auto 0 auto; cursor: pointer; transition: 0.3s ease; }
     .preview-bw.expanded { width: 100%; }
 
-    /* FOTO FINAL VISIBLE PARA DESCARGA MANUAL */
-    .mini-canvas-container { position: relative; width: 100%; height: auto; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; text-align: center;}
+    /* FOTO FINAL VISIBLE PARA DESCARGA MANUAL OPCIONAL */
+    .mini-canvas-container { position: relative; width: 100%; height: auto; border-radius: 8px; overflow: hidden; border: 2px solid #10b981; margin-bottom: 15px; text-align: center; background:#000;}
     #canvasFinal { width: 100%; height: auto; object-fit: contain; background: #000; display: none; }
-    #imgFinalDescarga { width: 100%; height: auto; object-fit: contain; display: block; }
-    .instruccion-descarga { background: #ea580c; color: white; padding: 6px; font-size: 0.8rem; font-weight: bold; text-align: center; }
+    #imgFinalDescarga { width: 100%; height: auto; object-fit: contain; display: block; max-height: 50vh;}
 
     /* EDITOR MANUAL EN 2 COLUMNAS */
     #manualEditor { background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #10b981; }
@@ -123,7 +122,7 @@
     <button class="btn btn-danger" onclick="reintentarCamara()">🔄 Volver a Tomar Foto</button>
   </div>
 
-  <!-- PANEL 4: ESTUDIO B/N Y EDICIÓN -->
+  <!-- PANEL 4: ESTUDIO B/N Y EDICIÓN (BOTONES SEPARADOS) -->
   <div id="panel-review" class="panel">
     <div class="filter-panel">
       <div class="editor-title" style="border-color:#3b82f6; font-size:0.85rem;">VISOR DE LECTURA (B/N)</div>
@@ -136,7 +135,6 @@
 
     <!-- Fotografía Final Compacta Convertida a <img> para facilitar descarga táctil -->
     <div class="mini-canvas-container">
-      <div class="instruccion-descarga">👇 Mantenga presionada la foto para Guardarla en su galería 👇</div>
       <canvas id="canvasFinal"></canvas>
       <img id="imgFinalDescarga" src="" alt="Examen Evaluado">
     </div>
@@ -146,17 +144,18 @@
       <div id="editorFilas"></div>
     </div>
 
-    <div class="loader" id="loaderUpload">⏳ Conectando con Google Sheets...</div>
+    <div class="loader" id="loaderUpload">⏳ Conectando...</div>
     
     <div id="reviewButtons">
-      <button class="btn btn-success" onclick="enviarCalificacion()">📥 SOLO ENVIAR DATOS A SHEETS</button>
-      <button class="btn btn-danger" onclick="volverAConfig()">❌ Descartar</button>
+      <button class="btn btn-blue" onclick="descargarImagenManual()">💾 PASO 1: DESCARGAR IMAGEN</button>
+      <button class="btn btn-success" onclick="enviarCalificacion()">📤 PASO 2: ENVIAR DATOS A SHEETS</button>
+      <button class="btn btn-danger" onclick="volverAConfig()" style="margin-top: 20px;">❌ Descartar y Volver al Menú</button>
     </div>
   </div>
 
   <script>
     // =========================================================================
-    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT (Asegúrese de las comillas)
+    // ⚠️ INSERTA AQUÍ LA URL DE TU SCRIPT DE GOOGLE APPS SCRIPT (CUALQUIER PERSONA)
     // =========================================================================
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbdnobu9aBFhXkZEfY8g2TeCiK4HEvjB6Rujp5h3O-PuJsd9j7xIj1JikgHlICXfgAAw/exec";
 
@@ -174,7 +173,6 @@
 
     // Recorte Manual
     let pageTopY = 0; let pageBottomY = 0; let activePageLine = null;
-
     let corners = []; let activeHandle = null; let dragOffset = {x:0, y:0};
     let modoPantalla = false;
 
@@ -333,8 +331,6 @@
     });
     window.addEventListener('pointerup', () => { activeHandle = null; });
 
-    function volverAlCrop() { switchPanel('panel-crop'); }
-
     // PASO 3: APLANADO Y FILTROS B/N
     function iniciarFiltrosYEdicion() {
       if (!opencvReady) { alert("Cargando motor..."); return; }
@@ -431,12 +427,20 @@
       let notaSobre100 = Math.round((aciertos / cantP) * 100);
       dataEvaluacion = { aciertos: aciertos, fallos: cantP - aciertos, totalPreguntas: cantP, nota100: notaSobre100, detalleRespuestas: detalleArray.join(", "), preguntasIncorrectas: incorrectasArray.length > 0 ? incorrectasArray.join(", ") : "Ninguna" };
 
-      // DIBUJAR FOTO COMPLETA
-      canvasFinal.width = capturedImage.width; canvasFinal.height = capturedImage.height;
+      // GENERAR NOMBRE DEL ARCHIVO PARA QUE ESTÉ LISTO AL DESCARGAR
+      let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
+      let t = examenActual.tipo.toUpperCase(); let tA="OT";
+      if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
+      let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
+      finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
+
+      canvasFinal.width = capturedImage.width; 
+      canvasFinal.height = capturedImage.height;
       ctxFinal.drawImage(capturedImage, 0, 0);
 
       // --- 1. Sello Superior ---
-      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)"; ctxFinal.fillRect(20, 20, 750, 110);
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctxFinal.fillRect(20, 20, 750, 110);
       ctxFinal.lineWidth = 3; ctxFinal.strokeStyle = "black"; ctxFinal.strokeRect(20, 20, 750, 110);
       
       ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 35px Arial";
@@ -468,18 +472,28 @@
       MatrizInversa.delete(); srcTri.delete(); dstTri.delete();
 
       // --- 3. SELLO INFERIOR DERECHO ---
-      let stampW = 600; let stampH = 150 + (listRubricasParaSello.length * 32);
-      let stampX = canvasFinal.width - stampW - 30; let stampY = canvasFinal.height - stampH - 30;
+      let stampW = 600; 
+      let stampH = 150 + (listRubricasParaSello.length * 32);
+      let stampX = canvasFinal.width - stampW - 30;
+      let stampY = canvasFinal.height - stampH - 30;
 
-      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.95)"; ctxFinal.fillRect(stampX, stampY, stampW, stampH);
+      ctxFinal.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctxFinal.fillRect(stampX, stampY, stampW, stampH);
       ctxFinal.lineWidth = 4; ctxFinal.strokeStyle = "#000"; ctxFinal.strokeRect(stampX, stampY, stampW, stampH);
 
-      ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial"; ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
-      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial"; ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
+      // Bloque Nota
+      ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial";
+      ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
 
-      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial"; ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
+      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial";
+      ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
+
+      // Bloque Rúbricas Mapeadas
+      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
+      ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
       
-      let currentY = stampY + 175; ctxFinal.font = "22px Arial";
+      let currentY = stampY + 175;
+      ctxFinal.font = "22px Arial";
       for (let i=0; i<listRubricasParaSello.length; i++) {
           let texto = listRubricasParaSello[i];
           ctxFinal.fillStyle = texto.startsWith("✅") ? "green" : "red";
@@ -488,43 +502,65 @@
 
       finalBase64 = canvasFinal.toDataURL('image/jpeg', 0.85).split(',')[1];
       
-      // Pasar la imagen al elemento <img> para descarga táctil por si acaso
+      // Mostrar la imagen final en el elemento <img> (Para que se pueda guardar manteniendo el dedo)
       document.getElementById('imgFinalDescarga').src = "data:image/jpeg;base64," + finalBase64;
     }
 
     function actualizarRespuestaManual(idx, valor) { arregloRespuestasManuales[idx] = valor; renderizarResultadosYEditor(); }
 
+    // BOTÓN 1: DESCARGAR IMAGEN
+    function descargarImagenManual() {
+      try {
+        const link = document.createElement("a"); 
+        link.href = "data:image/jpeg;base64," + finalBase64; 
+        link.download = finalFileName + ".jpg";
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link);
+        showNotif("Imagen descargada en su celular.");
+      } catch (err) {
+        alert("Su navegador bloquea las descargas automáticas. Mantenga su dedo sobre la foto y seleccione 'Descargar imagen'.");
+      }
+    }
+
+    // BOTÓN 2: ENVIAR A SHEETS (A PRUEBA DE FALLOS)
     async function enviarCalificacion() {
-      alert("Paso 1: Iniciando conexión con Google Sheets...");
-      document.getElementById('reviewButtons').style.display = 'none'; document.getElementById('loaderUpload').style.display = 'block';
+      document.getElementById('reviewButtons').style.display = 'none'; 
+      document.getElementById('loaderUpload').style.display = 'block';
 
-      let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
-      let t = examenActual.tipo.toUpperCase(); let tA="OT";
-      if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
-      let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
-      finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
-
-      let payload = { pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, tipo: examenActual.tipo, trimestre: examenActual.trimestre, nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, detalleRespuestas: dataEvaluacion.detalleRespuestas, preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, fileName: finalFileName };
+      let payload = { 
+        pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, 
+        tipo: examenActual.tipo, trimestre: examenActual.trimestre, 
+        nLista: estudianteActual.n_lista, nombre: estudianteActual.nombre, 
+        aciertos: dataEvaluacion.aciertos, fallos: dataEvaluacion.fallos, 
+        totalPreguntas: dataEvaluacion.totalPreguntas, nota100: dataEvaluacion.nota100, 
+        detalleRespuestas: dataEvaluacion.detalleRespuestas, 
+        preguntasIncorrectas: dataEvaluacion.preguntasIncorrectas, 
+        fileName: finalFileName 
+      };
 
       try {
         let res = await fetch(SCRIPT_URL, { 
             method: "POST", 
             body: JSON.stringify(payload), 
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            redirect: "follow"
+            headers: { "Content-Type": "text/plain;charset=utf-8" }
         }); 
         
         let result = await res.json();
+        
         if (result.status === "success") { 
           showNotif("¡Nota enviada a Sheets con éxito!"); 
-          alert("Paso 2: Datos guardados en Excel. Por favor, mantenga el dedo sobre la foto de abajo para guardarla en su celular.");
-          document.getElementById('loaderUpload').style.display = 'none'; 
-        } else { throw new Error(result.message); }
+          setTimeout(() => { switchPanel('panel-config'); }, 2500); 
+        } else {
+          throw new Error(result.message);
+        }
+        
       } catch (e) { 
-        alert("Error crítico: " + e.message + "\n\n¿Creó una NUEVA VERSIÓN en Apps Script?"); 
-        document.getElementById('reviewButtons').style.display = 'block'; 
+        alert("Error de envío a Google Sheets.\n\n" + e.message); 
+        document.getElementById('reviewButtons').style.display = 'flex'; 
+      } finally { 
         document.getElementById('loaderUpload').style.display = 'none'; 
-      } 
+      }
     }
   </script>
 </body>
