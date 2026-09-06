@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OMR Scanner Pro - Sellos y Rúbricas Seguras</title>
+  <title>OMR Scanner Pro - Rúbricas por Índice</title>
   <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();"></script>
   <style>
     :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --primary: #3b82f6; --success: #10b981; --danger: #ef4444; }
@@ -24,7 +24,7 @@
     .camera-wrapper { position: relative; width: 100%; aspect-ratio: 8.5/11; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 15px; border: 2px solid #3b82f6; }
     video { width: 100%; height: 100%; object-fit: cover; }
 
-    /* LIENZO RECORTE MANUAL (Líneas Roja y Amarilla) */
+    /* LIENZO RECORTE MANUAL */
     .page-crop-stage { position: relative; width: 100%; aspect-ratio: 8.5/11; background: #000; border-radius: 10px; overflow: hidden; margin-bottom: 15px; touch-action: none; border: 2px solid #ea580c;}
     #pageCropCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
@@ -38,7 +38,7 @@
     .filter-row input[type=range] { flex: 1; margin: 0 10px; accent-color: #3b82f6; }
     .filter-row span { font-size: 0.8rem; color: #f8fafc; width: 30px; text-align: right; }
     
-    /* VISOR B/N 33% EXPANSIBLE */
+    /* VISOR B/N */
     .preview-bw { width: 33%; height: auto; background: #000; border: 1px solid #334155; border-radius: 6px; display: inline-block; margin: 8px auto 0 auto; cursor: pointer; transition: 0.3s ease; }
     .preview-bw.expanded { width: 100%; }
 
@@ -103,7 +103,7 @@
     <button class="btn btn-danger" onclick="volverAConfig()">❌ Cancelar</button>
   </div>
 
-  <!-- PANEL 2.5: RECORTE MANUAL DE PÁGINA (Arriba y Abajo) -->
+  <!-- PANEL 2.5: RECORTE MANUAL -->
   <div id="panel-page-crop" class="panel">
     <div class="info-text" style="color: #ea580c;">Paso 1.5: Arrastre las líneas roja y amarilla para recortar el fondo (mesa).</div>
     <div class="page-crop-stage" id="pageCropStage">
@@ -125,32 +125,27 @@
 
   <!-- PANEL 4: ESTUDIO B/N Y EDICIÓN -->
   <div id="panel-review" class="panel">
-    
-    <!-- Visor de Binarización -->
     <div class="filter-panel">
       <div class="editor-title" style="border-color:#3b82f6; font-size:0.85rem;">VISOR DE LECTURA (B/N)</div>
       <div class="filter-row"><label>Brillo</label><input type="range" id="slBrillo" min="-100" max="100" value="-25" oninput="aplicarFiltrosBinarizacion()"><span id="valBrillo">-25</span></div>
       <div class="filter-row"><label>Contraste</label><input type="range" id="slContraste" min="10" max="40" value="24" oninput="aplicarFiltrosBinarizacion()"><span id="valContraste">2.4</span></div>
       <div class="filter-row"><label>Lápiz</label><input type="range" id="slUmbral" min="100" max="250" value="168" oninput="aplicarFiltrosBinarizacion()"><span id="valUmbral">168</span></div>
-      
-      <!-- Visor miniatura que se expande al tocar -->
       <canvas id="bwCanvasPreview" class="preview-bw" onclick="toggleExpandBW(this)"></canvas>
       <div style="font-size:0.75rem; color:#94a3b8; text-align:center; margin-top:4px;">(Toque la imagen B/N para ampliarla)</div>
     </div>
 
-    <!-- Fotografía Final Compacta con Sellos -->
+    <!-- Fotografía Final Compacta -->
     <div class="mini-canvas-container" id="miniCanvasBox" onclick="toggleExpandCanvas()">
       <canvas id="canvasFinal"></canvas>
       <div class="expand-hint" id="expandHint">🔍 Toca para ampliar</div>
     </div>
     
-    <!-- Editor Manual en 2 Columnas -->
     <div id="manualEditor">
       <div class="editor-title">✏️ REVISIÓN MANUAL</div>
       <div id="editorFilas"></div>
     </div>
 
-    <div class="loader" id="loaderUpload">⏳ Guardando foto y subiendo datos...</div>
+    <div class="loader" id="loaderUpload">⏳ Guardando...</div>
     
     <div id="reviewButtons">
       <button class="btn btn-success" onclick="enviarCalificacion()">📥 CONFIRMAR Y SUBIR NOTA</button>
@@ -204,7 +199,7 @@
         let selEx = document.getElementById('selExamen'); selEx.innerHTML = '<option value="">-- Elija un examen --</option>';
         dbExamenes.forEach(ex => { let opt = document.createElement('option'); opt.value = ex.id; opt.innerText = `[${ex.id}] ${ex.tema}`; selEx.appendChild(opt); });
         document.getElementById('selectionCard').style.display = 'block'; switchPanel('panel-config'); showNotif("✅ Acceso Concedido");
-      } catch (err) { alert("Error de conexión a Sheets."); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
+      } catch (err) { alert("Error de conexión. Asegúrese que el App Script esté para 'Cualquier Persona'"); document.getElementById("btnLogin").innerText = "Verificar e Ingresar"; document.getElementById("btnLogin").classList.remove("btn-disabled"); }
     }
 
     function cerrarSesion() { userPin = ""; localStorage.removeItem("omr_pin"); document.getElementById("inputPin").value = ""; document.getElementById("selectionCard").style.display = "none"; switchPanel("panel-login"); }
@@ -396,6 +391,7 @@
       renderizarResultadosYEditor();
     }
 
+    // WrapText para que la rúbrica encaje en el cuadrito sin desbordarse
     function wrapText(context, text, x, y, maxWidth, lineHeight) {
         var words = text.split(' '); var line = '';
         for(var n = 0; n < words.length; n++) {
@@ -410,20 +406,28 @@
       let cantP = examenActual.cant_preguntas; let clave = examenActual.clave; let opc = examenActual.opciones;
       let aciertos = 0; let detalleArray = []; let incorrectasArray = []; let html = "";
       
-      let listFallas = []; 
+      // EL MAPEO MAESTRO DE RÚBRICAS POR ÍNDICE (Separador |)
+      // Si el excel venía vacío, creamos arrays seguros
+      let arrRubA = examenActual.rubA || [];
+      let arrRubF = examenActual.rubF || [];
 
-      // RECUPERACIÓN SEGURA DE RÚBRICAS (A prueba de errores si el Excel usó comas)
-      let rawRubF = examenActual.rubF || "";
-      let arrRubF = rawRubF.includes("|") ? rawRubF.split("|") : rawRubF.split(",");
+      let listRubricasParaSello = []; 
 
       for (let i = 0; i < cantP; i++) {
         let lC = clave[i]; let lM = arregloRespuestasManuales[i]; let esCorrecta = (lM === lC);
-        if (esCorrecta) aciertos++; 
-        else {
+        
+        // Obtener el texto específico de ese índice (o un texto por defecto)
+        let fA = (arrRubA[i] && arrRubA[i].trim() !== "") ? arrRubA[i].trim() : "¡Bien hecho!";
+        let fF = (arrRubF[i] && arrRubF[i].trim() !== "") ? arrRubF[i].trim() : "Revisar procedimiento.";
+
+        if (esCorrecta) {
+            aciertos++; 
+            listRubricasParaSello.push(`✅ P${i+1}: ${fA}`);
+        } else {
             incorrectasArray.push(i+1);
-            let feedback = arrRubF[i] ? arrRubF[i].trim() : "Revisar el ejercicio.";
-            listFallas.push(`P${i+1}: ${feedback}`);
+            listRubricasParaSello.push(`❌ P${i+1}: ${fF}`);
         }
+        
         detalleArray.push(`${i+1}:${lM}(${esCorrecta?'OK':'❌'+lC})`);
 
         let opts = ["A", "B", "C", "D"].slice(0, opc); opts.push("BLANCO");
@@ -438,14 +442,12 @@
       let notaSobre100 = Math.round((aciertos / cantP) * 100);
       dataEvaluacion = { aciertos: aciertos, fallos: cantP - aciertos, totalPreguntas: cantP, nota100: notaSobre100, detalleRespuestas: detalleArray.join(", "), preguntasIncorrectas: incorrectasArray.length > 0 ? incorrectasArray.join(", ") : "Ninguna" };
 
-      // DIBUJAR LA FOTO RECORTADA (SIN LA MESA DE FONDO)
+      // DIBUJAR LA FOTO ORIGINAL RECORTADA
       canvasFinal.width = capturedImage.width; 
       canvasFinal.height = capturedImage.height;
       ctxFinal.drawImage(capturedImage, 0, 0);
 
-      // --- SELLOS DE AGUA ---
-
-      // 1. Sello Superior (Nombre y Curso)
+      // --- 1. Sello Superior (Nombre y Curso) ---
       ctxFinal.fillStyle = "rgba(255, 255, 255, 0.9)";
       ctxFinal.fillRect(20, 20, 750, 110);
       ctxFinal.lineWidth = 3; ctxFinal.strokeStyle = "black"; ctxFinal.strokeRect(20, 20, 750, 110);
@@ -455,7 +457,7 @@
       ctxFinal.font = "28px Arial";
       ctxFinal.fillText(`📚 CURSO: ${examenActual.curso}  |  N° LISTA: ${estudianteActual.n_lista}`, 40, 100);
 
-      // 2. Círculos de revisión en la hoja OMR
+      // --- 2. Círculos Verdes/Rojos en la matriz de respuestas ---
       let scaleX = capturedImage.width / cropCanvas.width; let scaleY = capturedImage.height / cropCanvas.height;
       let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [corners[0].x * scaleX, corners[0].y * scaleY, corners[1].x * scaleX, corners[1].y * scaleY, corners[2].x * scaleX, corners[2].y * scaleY, corners[3].x * scaleX, corners[3].y * scaleY]);
       let targetW = (opc + 1) * 40; let targetH = (cantP + 1) * 40;
@@ -478,9 +480,9 @@
       }
       MatrizInversa.delete(); srcTri.delete(); dstTri.delete();
 
-      // 3. Sello de la NOTA y Rúbricas (ESQUINA INFERIOR DERECHA)
-      let stampW = 550; 
-      let stampH = listFallas.length > 0 ? 150 + (listFallas.length * 35) : 150;
+      // --- 3. SELLO DE RÚBRICAS Y NOTA (ESQUINA INFERIOR DERECHA) ---
+      let stampW = 600; 
+      let stampH = 150 + (listRubricasParaSello.length * 32);
       let stampX = canvasFinal.width - stampW - 30;
       let stampY = canvasFinal.height - stampH - 30;
 
@@ -488,23 +490,24 @@
       ctxFinal.fillRect(stampX, stampY, stampW, stampH);
       ctxFinal.lineWidth = 4; ctxFinal.strokeStyle = "#000"; ctxFinal.strokeRect(stampX, stampY, stampW, stampH);
 
+      // Bloque Nota
       ctxFinal.fillStyle = "red"; ctxFinal.font = "bold 45px Arial";
       ctxFinal.fillText(`NOTA: ${notaSobre100}/100`, stampX + 20, stampY + 55);
 
-      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 28px Arial";
+      ctxFinal.fillStyle = "blue"; ctxFinal.font = "bold 26px Arial";
       ctxFinal.fillText(`(${aciertos} aciertos, ${cantP - aciertos} fallos)`, stampX + 20, stampY + 95);
 
-      if (listFallas.length > 0) {
-          ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
-          ctxFinal.fillText("SUGERENCIAS DE MEJORA:", stampX + 20, stampY + 140);
-          ctxFinal.font = "22px Arial";
-          let currentY = stampY + 175;
-          for (let i=0; i<listFallas.length; i++) {
-              currentY = wrapText(ctxFinal, listFallas[i], stampX + 20, currentY, stampW - 40, 28) + 5;
-          }
-      } else {
-          ctxFinal.fillStyle = "green"; ctxFinal.font = "bold 28px Arial";
-          ctxFinal.fillText("¡Excelente trabajo! Sin errores.", stampX + 20, stampY + 140);
+      // Bloque Rúbricas Mapeadas
+      ctxFinal.fillStyle = "black"; ctxFinal.font = "bold 24px Arial";
+      ctxFinal.fillText("📋 DESEMPEÑO POR PREGUNTA:", stampX + 20, stampY + 140);
+      
+      let currentY = stampY + 175;
+      ctxFinal.font = "22px Arial";
+      for (let i=0; i<listRubricasParaSello.length; i++) {
+          let texto = listRubricasParaSello[i];
+          ctxFinal.fillStyle = texto.startsWith("✅") ? "green" : "red";
+          // WrapText dibujará y saltará a la siguiente línea si la frase es larga
+          currentY = wrapText(ctxFinal, texto, stampX + 20, currentY, stampW - 40, 28) + 5;
       }
 
       finalBase64 = canvasFinal.toDataURL('image/jpeg', 0.85).split(',')[1];
@@ -516,34 +519,25 @@
       try {
         const link = document.createElement("a"); link.href = "data:image/jpeg;base64," + base64; link.download = filename + ".jpg";
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Descarga directa bloqueada", e); }
     }
 
+    // EL ENVÍO A PRUEBA DE FALLOS CON DESCARGA PRIMERO
     async function enviarCalificacion() {
-      // 1. Bloqueamos los botones para evitar dobles clics
+      // Ocultar botones y mostrar carga
       document.getElementById('reviewButtons').style.display = 'none'; 
       document.getElementById('loaderUpload').style.display = 'block';
 
-      // 2. Generamos el nombre del archivo
+      // Crear el nombre del archivo final
       let nomA = estudianteActual.nombre.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
       let t = examenActual.tipo.toUpperCase(); let tA="OT";
       if(t.includes("REP")) tA="REP"; else if(t.includes("PRÁC")) tA="PRA"; else if(t.includes("REF")) tA="REF"; else if(t.includes("EVA")) tA="EVA"; else if(t.includes("CON")) tA="CON";
       let d = new Date(); let ts = String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()).slice(-2);
       finalFileName = `${examenActual.curso}-${tA}-${nomA}-${tA}-${ts}`;
 
-      // 3. INTENTO DE DESCARGA PROTEGIDO (Si el celular lo bloquea, no colapsa)
-      try {
-        const link = document.createElement("a"); 
-        link.href = "data:image/jpeg;base64," + finalBase64; 
-        link.download = finalFileName + ".jpg";
-        document.body.appendChild(link); 
-        link.click(); 
-        document.body.removeChild(link);
-      } catch (err) {
-        console.warn("El navegador bloqueó la descarga de la imagen, pero continuará el envío a Sheets.");
-      }
+      // SIEMPRE forzar la descarga de la imagen al celular primero
+      guardarImagenLocal(finalBase64, finalFileName);
 
-      // 4. PREPARAR DATOS PARA SHEETS
       let payload = { 
         pin: userPin, idExamen: examenActual.id, curso: examenActual.curso, 
         tipo: examenActual.tipo, trimestre: examenActual.trimestre, 
@@ -555,25 +549,24 @@
         fileName: finalFileName 
       };
 
-      // 5. ENVÍO A GOOGLE SHEETS A PRUEBA DE FALLOS
       try {
+        // Envio tipo texto (Evita bloqueos CORS)
         let res = await fetch(SCRIPT_URL, { 
             method: "POST", 
             body: JSON.stringify(payload), 
-            headers: { "Content-Type": "text/plain;charset=utf-8" } 
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            redirect: "follow"
         }); 
         
         let result = await res.json();
-        
         if (result.status === "success") { 
           showNotif("¡Nota enviada a Sheets con éxito!"); 
-          setTimeout(() => { switchPanel('panel-config'); }, 2500); 
+          setTimeout(() => { switchPanel('panel-config'); }, 2200); 
         } else {
           throw new Error(result.message);
         }
-        
       } catch (e) { 
-        alert("Error: No se pudo enviar a Google Sheets.\n\nCausa probable: Su enlace SCRIPT_URL está vacío o no se creó una 'Nueva versión' en Apps Script.\n\nDetalle: " + e.message); 
+        alert("La foto se guardó en su galería, pero NO se pudo enviar a Google Sheets.\n\nRevise su Apps Script y asegúrese de haber creado una 'Nueva versión'.\nError: " + e.message); 
         document.getElementById('reviewButtons').style.display = 'block'; 
       } finally { 
         document.getElementById('loaderUpload').style.display = 'none'; 
